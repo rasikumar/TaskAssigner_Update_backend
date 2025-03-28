@@ -921,20 +921,96 @@ export const empid_generate = async (req, res) => {
   }
 };
 
+// export const getEmployeesByDepartment = async (req, res) => {
+//   console.log(req.user);
+//   if (req.user.role === "manager" || req.user.role === "admin") {
+//     const { department } = req.body; // Get department from query params
+
+//     if (!department) {
+//       return res.status(400).json({ message: "Department is required" });
+//     }
+
+//     try {
+//       const employees = await UserModel.find({
+//         department,
+//         is_deleted: false,
+//       }).select("-password"); // Exclude password from the response
+
+//       if (employees.length === 0) {
+//         return res
+//           .status(404)
+//           .json({ message: "No employees found in this department" });
+//       }
+
+//       const roleCounts = await UserModel.aggregate([
+//         {
+//           $match: {
+//             department,
+//             is_deleted: false,
+//           },
+//         },
+//         {
+//           $group: {
+//             _id: "$role",
+//             role: { $first: "$role" },
+//             count: { $sum: 1 },
+//           },
+//         },
+//         {
+//           $project: {
+//             _id: 0, // Remove _id
+//             role: "$_id", // Rename _id to role
+//             count: 1,
+//           },
+//         },
+//       ]);
+
+//       return res.status(200).json({
+//         status: "success",
+//         department,
+//         totalEmployees: employees.length,
+//         roleCounts,
+//         employeeList: employees,
+//       });
+//     } catch (error) {
+//       console.log(error);
+//       res.status(500).json({
+//         status: "failure",
+//         message: "Server Error",
+//       });
+//     }
+//   } else {
+//     return res.status(403).json({ message: "Access Denied" });
+//   }
+// };
+
 export const getEmployeesByDepartment = async (req, res) => {
   console.log(req.user);
+
   if (req.user.role === "manager" || req.user.role === "admin") {
-    const { department } = req.body; // Get department from query params
+    let { department } = req.body;
+
+    // If user is a manager, restrict them to their own department
+    if (req.user.role === "manager") {
+      department = req.user.department;
+    }
 
     if (!department) {
       return res.status(400).json({ message: "Department is required" });
     }
 
     try {
-      const employees = await UserModel.find({
+      const filter = {
         department,
         is_deleted: false,
-      }).select("-password"); // Exclude password from the response
+      };
+
+      // If user is a manager, exclude other managers
+      if (req.user.role === "manager") {
+        filter.role = { $ne: "manager" }; // Exclude managers
+      }
+
+      const employees = await UserModel.find(filter).select("-password"); // Exclude password from the response
 
       if (employees.length === 0) {
         return res
@@ -944,10 +1020,7 @@ export const getEmployeesByDepartment = async (req, res) => {
 
       const roleCounts = await UserModel.aggregate([
         {
-          $match: {
-            department,
-            is_deleted: false,
-          },
+          $match: filter, // Apply the same filtering
         },
         {
           $group: {
