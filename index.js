@@ -111,7 +111,7 @@ import adminRoute from "./Routes/Admin_Route.js";
 import "./Service/Milestone_service.js"; 
 
 const app = express();
-const port = 4001;
+const port = 4004;
 
 // Middleware
 app.use(express.json());
@@ -123,7 +123,6 @@ app.use(cors({ origin: "*", methods: ["GET", "POST", "PUT", "DELETE"], credentia
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-app.use(express.static(path.join(__dirname, "/dist")));
 
 // API Routes
 app.use("/user", userRoute);
@@ -133,6 +132,10 @@ app.use("/admin", adminRoute);
 // Database Connection
 connectDatabase();
 
+app.use(express.static(path.join(__dirname, "/dist")));
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, "dist", "index.html"));
+});
 // Start Server
 app.listen(port, () => {
   console.log(`Server running successfully on port ${port}`);
