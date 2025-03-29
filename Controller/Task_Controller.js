@@ -1394,12 +1394,12 @@ export const getTaskByEmployee = async (req, res) => {
       }
 
       // Managers can view tasks of any employee (skip department validation)
-      if (userRole !== "manager" && employeeData.department !== req.user.department) {
+      if (userRole !== "admin" && userRole !== "manager" && employeeData.department !== req.user.department) {
         return res.status(403).json({
-          status: false,
-          message: "You are not authorized to view tasks of employees from another department.",
+            status: false,
+            message: "You are not authorized to view tasks of employees from another department.",
         });
-      }
+    }
 
       filter.assigned_to = employeeId;
     }
