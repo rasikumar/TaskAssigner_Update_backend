@@ -1245,6 +1245,131 @@ export const getTaskRelatedToProject = async (req, res) => {
     });
   }
 };
+// export const getTaskByEmployee = async (req, res) => {
+//   try {
+//     const { page = 1, limit = 10, status, search = "", employeeId } = req.body; // Changed from req.query to req.body
+
+//     const pageNumber = parseInt(page, 10);
+//     const limitNumber = parseInt(limit, 10);
+
+//     const userId = employeeId || req.user.id; 
+//     const userRole = req.user.role; 
+//     const userDepartment = req.user.department; 
+
+//     let filter = { is_deleted: false };
+
+//     if (userRole === "manager") {
+//       const managerProjects = await ProjectModel.find({
+//         project_ownership: userId,
+//       }).select("_id");
+
+//       filter.$or = [
+//         { report_to: userId },
+//         { project: { $in: managerProjects } },
+//       ];
+//     } else if (userRole === "team lead") {
+//       filter.$or = [{ assigned_to: userId }, { assigned_by: userId }];
+//     } else if (userRole === "member") {
+//       filter.assigned_to = userId;
+//     }
+
+//     // If fetching for a specific employee, enforce their tasks
+//     if (employeeId) {
+//       filter.assigned_to = employeeId;
+//     }
+
+//     if (userDepartment === "testing") {
+//       const uatTasks = await TaskModel.find({
+//         move_to_uat: true,
+//         tester_approval: false,
+//         is_deleted: false
+//       })
+//         .populate("project", "project_name")
+//         .populate("assigned_to", "name email")
+//         .populate("assigned_by", "name email")
+//         .populate("report_to", "name email")
+//         .sort({ updatedAt: -1 });
+
+//       const uatStatusSummary = uatTasks.reduce((acc, task) => {
+//         acc[task.status] = (acc[task.status] || 0) + 1;
+//         return acc;
+//       }, {});
+
+//       return res.status(200).json({
+//         status: true,
+//         message: "Tasks retrieved successfully.",
+//         data: {
+//           uatTasks,
+//           uatStatusSummary,
+//         },
+//       });
+//     }
+
+//     const validStatuses = [
+//       "Completed",
+//       "In progress",
+//       "Not started",
+//       "Pending",
+//       "Cancelled",
+//     ];
+
+//     if (status) {
+//       if (!validStatuses.includes(status)) {
+//         return res.status(400).json({
+//           status: false,
+//           message: `Invalid status provided. Valid statuses are: ${validStatuses.join(", ")}`,
+//         });
+//       }
+//       filter.status = status;
+//     }
+
+//     if (search.trim()) {
+//       const searchRegex = new RegExp(search.trim(), "i");
+
+//       // Preserve existing $or filters if already set
+//       filter.$or = filter.$or ? [...filter.$or, { task_title: searchRegex }, { task_description: searchRegex }] 
+//                               : [{ task_title: searchRegex }, { task_description: searchRegex }];
+//     }
+
+//     const tasks = await TaskModel.find(filter)
+//       .sort({ _id: -1 })
+//       .skip((pageNumber - 1) * limitNumber)
+//       .limit(limitNumber)
+//       .populate("assigned_to", "name email")
+//       .populate("assigned_by", "name email")
+//       .populate("report_to", "name email")
+//       .populate("milestone", "name status")
+//       .populate("project", "project_name");
+
+//     const statusSummary = tasks.reduce((acc, task) => {
+//       acc[task.status] = (acc[task.status] || 0) + 1;
+//       return acc;
+//     }, {});
+
+//     const totalTasks = await TaskModel.countDocuments(filter);
+
+//     return res.status(200).json({
+//       status: true,
+//       message: "Tasks fetched successfully",
+//       data: {
+//         total: totalTasks,
+//         statusSummary,
+//         tasks,
+//         pagination: {
+//           currentPage: pageNumber,
+//           totalPages: Math.ceil(totalTasks / limitNumber),
+//         },
+//       },
+//     });
+//   } catch (error) {
+//     console.error(`[getTaskByEmployee]: Error fetching tasks - ${error.message}`);
+//     return res.status(500).json({
+//       status: false,
+//       message: "An error occurred while fetching tasks",
+//     });
+//   }
+// };
+
 export const getTaskByEmployee = async (req, res) => {
   try {
     const { page = 1, limit = 10, status, search = "", employeeId } = req.body; // Changed from req.query to req.body
@@ -1252,37 +1377,48 @@ export const getTaskByEmployee = async (req, res) => {
     const pageNumber = parseInt(page, 10);
     const limitNumber = parseInt(limit, 10);
 
-    const userId = employeeId || req.user.id; 
-    const userRole = req.user.role; 
-    const userDepartment = req.user.department; 
+    const userId = req.user.id;
+    const userRole = req.user.role;
 
     let filter = { is_deleted: false };
 
-    if (userRole === "manager") {
-      const managerProjects = await ProjectModel.find({
-        project_ownership: userId,
-      }).select("_id");
+    // If an employeeId is provided, filter by that employee's tasks
+    if (employeeId) {
+      const employeeData = await UserModel.findById(employeeId).select("department");
 
-      filter.$or = [
-        { report_to: userId },
-        { project: { $in: managerProjects } },
-      ];
+      if (!employeeData) {
+        return res.status(404).json({
+          status: false,
+          message: "Employee not found.",
+        });
+      }
+
+      // Managers can view tasks of any employee (skip department validation)
+      if (userRole !== "manager" && employeeData.department !== req.user.department) {
+        return res.status(403).json({
+          status: false,
+          message: "You are not authorized to view tasks of employees from another department.",
+        });
+      }
+
+      filter.assigned_to = employeeId;
+    }
+
+    // Role-based filtering
+    if (userRole === "manager") {
+      // Managers can view all tasks (no additional filters needed)
     } else if (userRole === "team lead") {
       filter.$or = [{ assigned_to: userId }, { assigned_by: userId }];
     } else if (userRole === "member") {
       filter.assigned_to = userId;
     }
 
-    // If fetching for a specific employee, enforce their tasks
-    if (employeeId) {
-      filter.assigned_to = employeeId;
-    }
-
-    if (userDepartment === "testing") {
+    // If user is from testing department, fetch UAT tasks separately
+    if (req.user.department === "testing") {
       const uatTasks = await TaskModel.find({
         move_to_uat: true,
         tester_approval: false,
-        is_deleted: false
+        is_deleted: false,
       })
         .populate("project", "project_name")
         .populate("assigned_to", "name email")
@@ -1305,6 +1441,7 @@ export const getTaskByEmployee = async (req, res) => {
       });
     }
 
+    // Valid statuses for filtering
     const validStatuses = [
       "Completed",
       "In progress",
@@ -1323,14 +1460,16 @@ export const getTaskByEmployee = async (req, res) => {
       filter.status = status;
     }
 
+    // Search functionality
     if (search.trim()) {
       const searchRegex = new RegExp(search.trim(), "i");
 
-      // Preserve existing $or filters if already set
-      filter.$or = filter.$or ? [...filter.$or, { task_title: searchRegex }, { task_description: searchRegex }] 
-                              : [{ task_title: searchRegex }, { task_description: searchRegex }];
+      filter.$or = filter.$or
+        ? [...filter.$or, { task_title: searchRegex }, { task_description: searchRegex }]
+        : [{ task_title: searchRegex }, { task_description: searchRegex }];
     }
 
+    // Fetch tasks with pagination and population
     const tasks = await TaskModel.find(filter)
       .sort({ _id: -1 })
       .skip((pageNumber - 1) * limitNumber)
@@ -1369,4 +1508,3 @@ export const getTaskByEmployee = async (req, res) => {
     });
   }
 };
-
